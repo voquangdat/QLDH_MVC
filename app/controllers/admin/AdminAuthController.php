@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../models/AuthModel.php';
 class AdminAuthController {
     private $authModel;
     
+    
     public function __construct() {
         $this->authModel = new AuthModel();
         
