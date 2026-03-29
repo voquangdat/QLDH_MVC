@@ -1,7 +1,7 @@
 <?php
 // app/controllers/frontend/OrderDetailController.php
 require_once __DIR__ . '/../../models/OrderModel.php';
-require_once __ssDIR__ . '/../../models/PaymentModel.php';
+require_once __DIR__ . '/../../models/PaymentModel.php';
 
 class OrderDetailController {
     private $orderModel;
