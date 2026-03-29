@@ -6,16 +6,14 @@ require_once __DIR__ . '/../../models/PaymentModel.php';
 class OrderDetailController {
     private $orderModel;
     private $paymentModel;
-        private $paymentModelV2;
-                private $paymentModelV3;
+
 
 
     
     public function __construct() {
         $this->orderModel = new OrderModel();
         $this->paymentModel = new PaymentModel();
-        $this->paymentModelV2 = new PaymentModelV2();
-        $this->paymentModelV3 = new PaymentModelV3();
+
     }
     
     /**
