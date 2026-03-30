@@ -283,4 +283,3 @@ try {
     error_log('Error in index.php: ' . $e->getMessage() . ' - Stack trace: ' . $e->getTraceAsString());
 }
 ?>
-// comment de test thu git 
