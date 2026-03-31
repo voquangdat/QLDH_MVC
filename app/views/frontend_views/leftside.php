@@ -1,21 +1,20 @@
 <?php
-// Sử dụng CategoryController để lấy dữ liệu
-$categoryController = new CategoryController();
-$categories = $categoryController->getMenuData();
+/**
+ * Sidebar/Category Navigation View
+ * Data được truyền từ Controller thông qua loadView()
+ */
 
-$loaisanpham_id = isset($_GET['loaisanpham_id']) ? $_GET['loaisanpham_id'] : null;
-
-// Lấy thông tin breadcrumb nếu có loaisanpham_id
-$breadcrumbInfo = null;
-if ($loaisanpham_id) {
-    $categoryModel = new CategoryModel();
-    $breadcrumbResult = $categoryModel->getCategoryInfo($loaisanpham_id);
-    if ($breadcrumbResult) {
-        $breadcrumbInfo = $breadcrumbResult->fetch_assoc();
-    }
+if (!isset($categories)) {
+    $categories = [];
+}
+if (!isset($breadcrumbInfo)) {
+    $breadcrumbInfo = null;
+}
+if (!isset($loaisanpham_id)) {
+    $loaisanpham_id = null;
 }
 ?>
-    <!-- -----------------------CARTEGPRY---------------------------------------------- -->
+    -----------------------CARTEGPRY----------------------------------------------
     <section class="cartegory">
         <div class="container">
             <div class="cartegory-top row">
@@ -30,18 +29,16 @@ if ($loaisanpham_id) {
                 <div class="cartegory-left">
                     <ul>
                     <?php
-                        if($categories && $categories->num_rows > 0) {
-                            while($category = $categories->fetch_assoc()) {
+                        if(is_array($categories) && count($categories) > 0) {
+                            foreach($categories as $category) {
                         ?>
-                        <li class="cartegory-left-li"><a href="#"><?php echo $category['danhmuc_ten'] ?></a>
+                        <li class="cartegory-left-li"><a href="#"><?php echo htmlspecialchars($category['danhmuc_ten']); ?></a>
                             <ul>
                                     <?php
-                                      $danhmuc_id = $category['danhmuc_id'];
-                                      $subCategories = $categoryController->getSubCategories($danhmuc_id);
-                                      if($subCategories && $subCategories->num_rows > 0) {
-                                          while($subCategory = $subCategories->fetch_assoc()) {
+                                      if(isset($category['subCategories']) && is_array($category['subCategories']) && count($category['subCategories']) > 0) {
+                                          foreach($category['subCategories'] as $subCategory) {
                                     ?>
-                                    <li><a href="index.php?page=category&loaisanpham_id=<?php echo $subCategory['loaisanpham_id'] ?>"><?php echo $subCategory['loaisanpham_ten'] ?></a></li>
+                                    <li><a href="index.php?page=category&loaisanpham_id=<?php echo htmlspecialchars($subCategory['loaisanpham_id']); ?>"><?php echo htmlspecialchars($subCategory['loaisanpham_ten']); ?></a></li>
                                     <?php
                                           }
                                       }
@@ -54,4 +51,4 @@ if ($loaisanpham_id) {
                         }
                         ?>                  
                     </ul>
-                </div>
+                </div>  <!-- End cartegory-left -->
