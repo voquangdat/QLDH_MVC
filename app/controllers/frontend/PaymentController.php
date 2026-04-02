@@ -2,17 +2,16 @@
 // app/controllers/frontend/PaymentController.php
 require_once __DIR__ . '/../../models/PaymentModel.php';
 require_once __DIR__ . '/../../models/OrderModel.php';
-require_once __DIR__ . '/../../models/MoMoPayment.php';
 
 class PaymentController {
     private $paymentModel;
     private $orderModel;
-    private $momoPayment;
+    // private $momoPayment;
     
     public function __construct() {
         $this->paymentModel = new PaymentModel();
         $this->orderModel = new OrderModel();
-        $this->momoPayment = new MoMoPayment();
+        // $this->momoPayment = new MoMoPayment();
     }
     
     /**
@@ -29,12 +28,6 @@ class PaymentController {
             case 'process':
                 $this->processPayment();
                 break;
-            case 'momo_return':
-                $this->momoReturn();
-                break;
-            case 'momo_notify':
-                $this->momoNotify();
-                break;
             case 'callback':
                 $this->paymentCallback();
                 break;
@@ -43,6 +36,7 @@ class PaymentController {
                 break;
         }
     }
+
     
     /**
      * Hiển thị trang thanh toán
@@ -91,7 +85,9 @@ class PaymentController {
         
         $this->loadView('payment', $data);
     }
+       
     
+
     /**
      * Xử lý thanh toán
      */
@@ -180,217 +176,106 @@ class PaymentController {
             exit;
         }
     }
-    
+    public function execPostRequest($url, $data)
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+                'Content-Type: application/json',
+                'Content-Length: ' . strlen($data))
+        );
+        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        //execute post
+        $result = curl_exec($ch);
+        //close connection
+        curl_close($ch);
+        return $result;
+    }
+
+    public function momoPayment($amount, $orderId)
+    {
+        $endpoint = "https://test-payment.momo.vn/v2/gateway/api/create";
+
+        $partnerCode = 'MOMOBKUN20180529';
+        $accessKey = 'klm05TvNBzhg7h7j';
+        $secretKey = 'at67qH6mk8w5Y1nAyMoYKMWACiEi2bsa';
+
+
+        $orderInfo = "Thanh toán qua MoMo";
+        // Sử dụng $amount và $orderId từ tham số hàm, không ghi đè
+        // $amount = (int)$amount;
+        $amount = (int)$amount; // Đảm bảo amount là số nguyên
+        $redirectUrl = 'http://localhost:3000/index.php?page=payment&action=callback';
+        $ipnUrl = "http://localhost:3000/index.php?page=payment&order_id=$orderId";
+        $extraData = "";
+        $requestId = time() . "";
+        $requestType = "payWithATM";
+
+        // Validate amount theo giới hạn MoMo (10,000 - 50,000,000 VND)
+        if ($amount < 10000 || $amount > 50000000) {
+            $this->setFlashMessage('error', 'Số tiền thanh toán phải từ 10.000đ đến 50.000.000đ');
+            header('Location: index.php?page=payment&order_id=' . $orderId);
+            exit;
+        }
+
+        $rawHash = "accessKey=" . $accessKey . "&amount=" . $amount . "&extraData=" . $extraData . "&ipnUrl=" . $ipnUrl . "&orderId=" . $orderId . "&orderInfo=" . $orderInfo . "&partnerCode=" . $partnerCode . "&redirectUrl=" . $redirectUrl . "&requestId=" . $requestId . "&requestType=" . $requestType;
+        $signature = hash_hmac("sha256", $rawHash, $secretKey);
+        $data = array('partnerCode' => $partnerCode,
+            'partnerName' => "Test",
+            "storeId" => "MomoTestStore",
+            'requestId' => $requestId,
+            'amount' => $amount,
+            'orderId' => $orderId,
+            'orderInfo' => $orderInfo,
+            'redirectUrl' => $redirectUrl,
+            'ipnUrl' => $ipnUrl,
+            'lang' => 'vi',
+            'extraData' => $extraData,
+            'requestType' => $requestType,
+            'signature' => $signature);
+        $result = $this->execPostRequest($endpoint, json_encode($data));
+        $jsonResult = json_decode($result, true);
+        // dd($jsonResult);
+        
+        if (isset($jsonResult['payUrl'])) {
+            header('Location: ' . $jsonResult['payUrl']);
+            exit;
+        } else {
+            error_log("MoMo payment error: " . json_encode($jsonResult));
+            $errorMessage = $jsonResult['message'] ?? 'Thanh toán MoMo không thành công';
+            $this->setFlashMessage('error', 'Lỗi MoMo: ' . $errorMessage);
+            header('Location: index.php?page=payment&order_id=' . $orderId);
+            exit;
+        }
+    }       
     /**
      * Xử lý các phương thức thanh toán khác nhau
      */
     private function handlePaymentMethod($paymentMethod, $paymentId, $amount, $orderId) {
         switch ($paymentMethod) {
-            case 'Thu tiền tận nơi':
+            case 'COD':
                 // COD
                 $this->paymentModel->updatePaymentStatus($paymentId, 'pending');
                 $this->completeCODOrder($paymentId, $orderId);
                 break;
+            case 'momo':
+                // set trạng thái chờ thanh toán
+                // $this->paymentModel->updatePaymentStatus($paymentId, 'pending');
                 
-            case 'Thanh toán bằng thẻ tín dụng(OnePay)':
-                // Redirect to OnePay gateway
-                $this->redirectToOnePay($paymentId, $amount, $orderId, 'credit');
-                break;
-                
-            case 'Thanh toán bằng thẻ ATM(OnePay)':
-                // Redirect to OnePay gateway
-                $this->redirectToOnePay($paymentId, $amount, $orderId, 'atm');
-                break;
-                
-            case 'Thanh toán Momo':
-                // Xử lý MoMo
-                $this->redirectToMoMo($paymentId, $amount, $orderId);
-                break;
+                // gọi momo
+                $this->momoPayment($amount, $orderId);
+                // $this->paymentModel->updatePaymentStatus($paymentId, 'pending');
+                $this->completePayment($paymentId, $orderId);
+                exit;
                 
             default:
                 $this->setFlashMessage('error', 'Phương thức thanh toán không hợp lệ');
                 header('Location: index.php?page=payment&order_id=' . $orderId);
                 exit;
         }
-    }
-    
-    /**
-     * Redirect đến MoMo
-     */
-    private function redirectToMoMo($paymentId, $amount, $orderId) {
-        // Lưu payment_id vào session để dùng khi callback
-        Session::set('momo_payment_id', $paymentId);
-        
-        // Tạo order info
-        $orderInfo = "Thanh toán đơn hàng #" . $orderId . " - VoxFootball";
-        
-        // Gọi API MoMo
-        $result = $this->momoPayment->createPayment($orderId, $amount, $orderInfo);
-        
-        if (isset($result['payUrl']) && !empty($result['payUrl'])) {
-            // Cập nhật trạng thái payment thành processing
-            $this->paymentModel->updatePaymentStatus($paymentId, 'pending');
-            
-            // Lưu thông tin MoMo request vào database (optional)
-            // Có thể thêm field momo_request_id vào bảng tbl_payment
-            
-            // Redirect đến trang thanh toán MoMo
-            error_log("Redirecting to MoMo: " . $result['payUrl']);
-            header('Location: ' . $result['payUrl']);
-            exit;
-        } else {
-            // Lỗi khi tạo payment
-            $errorMsg = isset($result['message']) ? $result['message'] : 'Không thể kết nối đến MoMo';
-            error_log("MoMo error: " . $errorMsg);
-            
-            $this->setFlashMessage('error', 'Lỗi thanh toán MoMo: ' . $errorMsg);
-            header('Location: index.php?page=payment&order_id=' . $orderId);
-            exit;
-        }
-    }
-    
-    /**
-     * Xử lý khi người dùng quay lại từ MoMo (Return URL)
-     */
-    public function momoReturn() {
-        error_log("MoMo Return URL called");
-        error_log("GET params: " . json_encode($_GET));
-        
-        // Lấy các tham số từ URL
-        $partnerCode = $_GET['partnerCode'] ?? '';
-        $orderId = $_GET['orderId'] ?? '';
-        $requestId = $_GET['requestId'] ?? '';
-        $amount = $_GET['amount'] ?? '';
-        $orderInfo = $_GET['orderInfo'] ?? '';
-        $orderType = $_GET['orderType'] ?? '';
-        $transId = $_GET['transId'] ?? '';
-        $resultCode = $_GET['resultCode'] ?? '';
-        $message = $_GET['message'] ?? '';
-        $payType = $_GET['payType'] ?? '';
-        $responseTime = $_GET['responseTime'] ?? '';
-        $extraData = $_GET['extraData'] ?? '';
-        $signature = $_GET['signature'] ?? '';
-        
-        // Xác thực signature
-        $isValid = $this->momoPayment->verifySignature($_GET);
-        
-        if (!$isValid) {
-            error_log("MoMo signature verification failed");
-            $this->setFlashMessage('error', 'Xác thực giao dịch thất bại. Vui lòng liên hệ hỗ trợ.');
-            header('Location: index.php?page=cart&id=live');
-            exit;
-        }
-        
-        // Lấy payment_id từ session
-        $paymentId = Session::get('momo_payment_id');
-        
-        if (!$paymentId) {
-            // Nếu không có trong session, tìm theo order_id
-            $payment = $this->paymentModel->getPaymentByOrderId($orderId);
-            if ($payment) {
-                $paymentId = $payment['payment_id'];
-            }
-        }
-        
-        // resultCode = 0: Thành công
-        if ($resultCode == '0') {
-            error_log("MoMo payment successful for order: $orderId");
-            
-            if ($paymentId) {
-                // Cập nhật trạng thái payment
-                $this->paymentModel->updatePaymentStatus($paymentId, 'completed', $transId);
-                
-                // Hoàn thành đơn hàng
-                $this->completePayment($paymentId, $orderId);
-            } else {
-                error_log("Payment ID not found for order: $orderId");
-                $this->setFlashMessage('error', 'Không tìm thấy thông tin thanh toán');
-                header('Location: index.php?page=cart&id=live');
-                exit;
-            }
-        } else {
-            // Thanh toán thất bại
-            error_log("MoMo payment failed for order: $orderId, resultCode: $resultCode");
-            
-            if ($paymentId) {
-                $this->paymentModel->updatePaymentStatus($paymentId, 'failed', $transId);
-            }
-            
-            $errorMessage = $this->momoPayment->getErrorMessage($resultCode);
-            $this->setFlashMessage('error', 'Thanh toán thất bại: ' . $errorMessage);
-            header('Location: index.php?page=payment&order_id=' . $orderId);
-            exit;
-        }
-    }
-    
-    /**
-     * Xử lý IPN (Instant Payment Notification) từ MoMo
-     * Đây là server-to-server callback, không phụ thuộc vào người dùng
-     */
-    public function momoNotify() {
-        error_log("MoMo IPN called");
-        
-        // Nhận dữ liệu JSON từ MoMo
-        $jsonData = file_get_contents('php://input');
-        error_log("MoMo IPN data: " . $jsonData);
-        
-        $data = json_decode($jsonData, true);
-        
-        if (!$data) {
-            error_log("Invalid JSON data from MoMo IPN");
-            http_response_code(400);
-            echo json_encode(['status' => 'error', 'message' => 'Invalid data']);
-            exit;
-        }
-        
-        // Xác thực signature
-        $isValid = $this->momoPayment->verifySignature($data);
-        
-        if (!$isValid) {
-            error_log("MoMo IPN signature verification failed");
-            http_response_code(400);
-            echo json_encode(['status' => 'error', 'message' => 'Invalid signature']);
-            exit;
-        }
-        
-        $orderId = $data['orderId'] ?? '';
-        $resultCode = $data['resultCode'] ?? '';
-        $transId = $data['transId'] ?? '';
-        
-        // Lấy payment theo order_id
-        $payment = $this->paymentModel->getPaymentByOrderId($orderId);
-        
-        if (!$payment) {
-            error_log("Payment not found for order: $orderId");
-            http_response_code(404);
-            echo json_encode(['status' => 'error', 'message' => 'Payment not found']);
-            exit;
-        }
-        
-        $paymentId = $payment['payment_id'];
-        
-        // resultCode = 0: Thành công
-        if ($resultCode == '0') {
-            // Cập nhật trạng thái payment
-            $this->paymentModel->updatePaymentStatus($paymentId, 'completed', $transId);
-            
-            // Xóa giỏ hàng (nếu chưa xóa)
-            $sessionId = $payment['session_idA'];
-            $this->paymentModel->clearCart($sessionId);
-            
-            error_log("MoMo IPN processed successfully for order: $orderId");
-            http_response_code(200);
-            echo json_encode(['status' => 'success']);
-        } else {
-            // Thanh toán thất bại
-            $this->paymentModel->updatePaymentStatus($paymentId, 'failed', $transId);
-            
-            error_log("MoMo IPN payment failed for order: $orderId, resultCode: $resultCode");
-            http_response_code(200);
-            echo json_encode(['status' => 'failed', 'resultCode' => $resultCode]);
-        }
-        
-        exit;
     }
     
     /**
@@ -410,8 +295,7 @@ class PaymentController {
         Session::set('TT', 0);
         
         // Xóa current_order_id khỏi session
-        unset($_SESSION['current_order_id']);
-        unset($_SESSION['momo_payment_id']);
+            unset($_SESSION['current_order_id']);
         
         $this->setFlashMessage('success', 'Thanh toán thành công!');
         header('Location: index.php?page=success&payment_id=' . $paymentId);
@@ -439,44 +323,31 @@ class PaymentController {
         exit;
     }
     
-    /**
-     * Redirect đến OnePay (demo)
-     */
-    private function redirectToOnePay($paymentId, $amount, $orderId, $type) {
-        switch($type) {
-            case 'credit':
-                $this->setFlashMessage('info', 'Chuyển hướng đến OnePay Credit...');
-                break;
-            case 'atm':
-                $this->setFlashMessage('info', 'Chuyển hướng đến OnePay ATM...');
-                break;
-            default:
-                $this->setFlashMessage('info', 'Chuyển hướng đến cổng thanh toán...');
-                break;
-        }
-        
-        // Cập nhật trạng thái payment thành processing
-        $this->paymentModel->updatePaymentStatus($paymentId, 'processing');
-        
-        // Tạm thời complete luôn cho demo
-        $this->completePayment($paymentId, $orderId);
-    }
+
     
     /**
      * Callback từ payment gateway
      */
     public function paymentCallback() {
-        $paymentId = $_GET['payment_id'] ?? null;
-        $status = $_GET['status'] ?? 'failed';
-        
-        if ($paymentId && $status === 'success') {
-            $payment = $this->paymentModel->getPaymentWithOrder($paymentId);
-            if ($payment && $payment['order_id']) {
-                $this->completePayment($paymentId, $payment['order_id']);
+        // MoMo gửi về resultCode=0 là thành công
+        $resultCode = $_GET['resultCode'] ?? -1;
+        $orderId    = $_GET['orderId'] ?? null;   // đây là order_id của bạn
+
+        if ($resultCode == 0 && $orderId) {
+            // Tìm payment record theo order_id
+            $payment = $this->paymentModel->getPaymentByOrderId($orderId);
+
+            if ($payment) {
+                $this->completePayment($payment['payment_id'], $orderId);
+            } else {
+                $this->setFlashMessage('error', 'Không tìm thấy thông tin thanh toán');
+                header('Location: index.php?page=payment&order_id=' . $orderId);
+                exit;
             }
         } else {
-            $this->setFlashMessage('error', 'Thanh toán không thành công');
-            header('Location: index.php?page=cart&id=live');
+            $message = $_GET['message'] ?? 'Thanh toán không thành công';
+            $this->setFlashMessage('error', 'MoMo: ' . $message);
+            header('Location: index.php?page=payment&order_id=' . $orderId);
             exit;
         }
     }

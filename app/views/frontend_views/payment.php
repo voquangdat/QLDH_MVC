@@ -31,14 +31,6 @@ $sessionId = session_id();
 </div>
 <?php endif; ?>
 
-<?php
-// Kiểm tra lỗi MoMo từ URL
-$momoError = $_GET['momo_error'] ?? '';
-if ($momoError) {
-    echo '<div class="alert alert-error">' . htmlspecialchars($momoError) . '</div>';
-}
-?>
-
 <!-- -----------------------PAYMENT---------------------------------------------- -->
 <section class="payment">
     <div class="container">
@@ -66,7 +58,7 @@ if ($momoError) {
                         <div class="payment-content-left-method-delivery">
                             <p style="font-weight: bold;">Phương thức giao hàng</p> <br>
                             <div class="payment-content-left-method-delivery-item">
-                                <input name="deliver-method" value="Giao hàng chuyển phát nhanh" checked type="radio" required>
+                                <input name="deliver-method" value="Giao hàng chuyển phát nhanh" type="radio" checked>
                                 <label>Giao hàng chuyển phát nhanh</label>
                             </div>
                             <div class="payment-content-left-method-delivery-item">
@@ -78,39 +70,15 @@ if ($momoError) {
                         
                         <div class="payment-content-left-method-payment">
                             <p style="font-weight: bold;">Phương thức thanh toán</p> <br>
-                            <p>Mọi giao dịch đều được bảo mật và mã hóa. Thông tin thẻ tín dụng sẽ không bao giờ được lưu lại.</p> <br>
                             
                             <div class="payment-content-left-method-payment-item">
-                                <input name="method-payment" value="Thanh toán bằng thẻ tín dụng(OnePay)" type="radio">
-                                <label>Thanh toán bằng thẻ tín dụng (OnePay)</label>
-                            </div>
-                            <div class="payment-content-left-method-payment-item-img">
-                                <img src="/public/image/visa.png" alt="">
-                            </div>
-                            
-                            <div class="payment-content-left-method-payment-item">
-                                <input name="method-payment" value="Thanh toán bằng thẻ ATM(OnePay)" type="radio">
-                                <label>Thanh toán bằng thẻ ATM (OnePay)</label>
-                            </div>
-                            <div class="payment-content-left-method-payment-item-img">
-                                <img src="/public/image/vcb.png" alt="">
-                            </div>
-                            
-                            <div class="payment-content-left-method-payment-item">
-                                <input name="method-payment" value="Thanh toán Momo" type="radio">
-                                <label>Thanh toán MoMo</label>
-                            </div>
-                            <div class="payment-content-left-method-payment-item-img">
-                                <img src="/public/image/momo.png" alt="">
-                            </div>
-                            
-                            <div class="payment-content-left-method-payment-item">
-                                <input value="Thu tiền tận nơi" checked name="method-payment" type="radio">
+                                <input value="COD" name="method-payment" checked type="radio">
                                 <label>Thu tiền tận nơi (COD)</label>
                             </div>
-                            
-                            <!-- Thông tin phương thức thanh toán -->
-                            <div id="payment-method-info" style="display: none; margin-top: 15px;"></div>
+                            <div class="payment-content-left-method-payment-item">
+                                <input value="momo" name="method-payment" type="radio">
+                                <label>Thanh toán Momo</label>
+                            </div>
                         </div>
                         
                         <div class="payment-content-right-payment">
@@ -255,37 +223,20 @@ $(document).ready(function(){
             return false;
         }
         
-        // Kiểm tra nếu chọn MoMo
-        if (paymentMethod === 'Thanh toán Momo') {
-            var confirmMsg = 'Bạn sẽ được chuyển đến trang thanh toán MoMo.\n' +
-                            'Vui lòng hoàn tất thanh toán trong vòng 15 phút.\n' +
-                            'Tiếp tục?';
-            
-            if (!confirm(confirmMsg)) {
-                e.preventDefault();
-                return false;
-            }
-        } else {
-            // Confirm cho các phương thức khác
-            var confirmMsg = 'Xác nhận thanh toán với:\n' +
-                            'Giao hàng: ' + deliveryMethod + '\n' +
-                            'Thanh toán: ' + paymentMethod;
-            
-            if (!confirm(confirmMsg)) {
-                e.preventDefault();
-                return false;
-            }
+        // Confirm xác nhận thanh toán
+        var confirmMsg = 'Xác nhận thanh toán với:\n' +
+                        'Giao hàng: ' + deliveryMethod + '\n' +
+                        'Thanh toán: ' + paymentMethod;
+        
+        if (!confirm(confirmMsg)) {
+            e.preventDefault();
+            return false;
         }
         
         // Show loading
         var $submitBtn = $(this).find('button[type="submit"]');
         $submitBtn.prop('disabled', true);
-        
-        if (paymentMethod === 'Thanh toán Momo') {
-            $submitBtn.html('<i class="fas fa-spinner fa-spin"></i> Đang kết nối MoMo...');
-        } else {
-            $submitBtn.text('Đang xử lý...');
-        }
+        $submitBtn.text('Đang xử lý...');
     });
     
     // Hiển thị thông tin khi chọn phương thức thanh toán
@@ -293,17 +244,8 @@ $(document).ready(function(){
         var method = $(this).val();
         var infoText = '';
         
-        switch(method) {
-            case 'Thanh toán Momo':
-                infoText = '<i class="fas fa-info-circle"></i> Bạn sẽ được chuyển đến ứng dụng MoMo để thanh toán. <br><small><strong>Test:</strong> SĐT: 0963181714, OTP: 123456</small>';
-                break;
-            case 'Thu tiền tận nơi':
-                infoText = '<i class="fas fa-info-circle"></i> Bạn sẽ thanh toán bằng tiền mặt khi nhận hàng.';
-                break;
-            case 'Thanh toán bằng thẻ tín dụng(OnePay)':
-            case 'Thanh toán bằng thẻ ATM(OnePay)':
-                infoText = '<i class="fas fa-info-circle"></i> Bạn sẽ được chuyển đến cổng thanh toán OnePay.';
-                break;
+        if (method === 'Thu tiền tận nơi') {
+            infoText = '<i class="fas fa-info-circle"></i> Bạn sẽ thanh toán bằng tiền mặt khi nhận hàng.';
         }
         
         if (infoText) {
